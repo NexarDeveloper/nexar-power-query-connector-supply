@@ -1,12 +1,12 @@
 // This file contains your Data Connector logic
 [Version = "1.0.0"]
-section Nexar_Connector;
+section Nexar_Supply_Connector;
 
 //
 //Client ID and Secrets
 //
 client_id = Text.FromBinary(Extension.Contents("client_id"));
-client_secret = "";
+client_secret = Text.FromBinary(Extension.Contents("client_secret"));
 
 
 //
@@ -41,21 +41,23 @@ redirect_uri = "https://oauth.powerbi.com/views/oauthredirect.html";
 //
 // Data Source definition - defines the overall connection logic and way the Power Query interacts with the data source
 //
-[DataSource.Kind="Nexar_Connector", Publish="Nexar_Connector.Publish"]
-shared Nexar_Connector.Contents = (companyId as text) =>
+[DataSource.Kind="Nexar_Supply_Connector", Publish="Nexar_Supply_Connector.Publish"]
+shared Nexar_Supply_Connector.Contents = (MPN as text) =>
     let
         accessToken = Extension.CurrentCredential()[access_token],
         url = "https://api.nexar.com/graphql",
         //Nexar Report Example
-        companyId = companyId, //Text.FromBinary(Extension.Contents("company_id")),
-        contents = GetReports(companyId, accessToken, url),    
+        //companyId = companyId, //Text.FromBinary(Extension.Contents("company_id")),
+        //contents = GetReports(companyId, accessToken, url),    
+        //source = contents
+        contents = SupplyExample(MPN, url, accessToken),
         source = contents
     in
         contents;
 
 
 // Data Source Kind description - specifies how the Power Query should connect to the data source
-Nexar_Connector = [
+Nexar_Supply_Connector = [
     Authentication = [
         OAuth = [
             StartLogin = StartLogin,
@@ -67,10 +69,11 @@ Nexar_Connector = [
 ];
 
 // Data Source UI publishing description
-Nexar_Connector.Publish = [
+Nexar_Supply_Connector.Publish = [
     Beta = true,
     Category = "Other",
-    ButtonText = { Extension.LoadString("ButtonTitle"), Extension.LoadString("ButtonHelp") },
+    //ButtonText = { Extension.LoadString("ButtonTitle"), Extension.LoadString("ButtonHelp") },
+    ButtonText = { "Nexar_Supply_Connector", Extension.LoadString("ButtonHelp") },
     LearnMoreUrl = "https://powerbi.microsoft.com/"
 ];
 
@@ -158,58 +161,28 @@ TokenMethod = (code, grant_type, optional verifier) =>
 
 
 //
-//Get Reports from the reporting portal 
+//Method for supply data example
 //
-GetReports = (companyId, accessToken, url) => 
+SupplyExample = (MPN, resourceUrl, accessToken) => 
     let
-
-        vUrl = url,
+        vUrl = resourceUrl,
         vHeaders =[
-        #"Method"="POST",
+        #"Method"="GET",
         #"Content-Type"="application/json",
         #"Authorization"=Text.Combine({"Bearer ", accessToken})
-        ],
-        //GQL Query to get report
-        query = "{""query"":""query test {  datRepReports( first: 100    companyId: \""" & companyId & "\""  where: { createdDate: { gte: \""2020-01-01\""  } }  ){    nodes {      title      id    }  }}""}",
-        vContent=Text.ToBinary(query),
-        Source = Web.Contents(vUrl, [Headers=vHeaders, Content=vContent]),
-        #"JSON" = Json.Document(Source),
-        data = #"JSON"[data],
-        datRepReports = data[datRepReports],
-        nodes = datRepReports[nodes],
-        #"Converted to Table" = Table.FromList(nodes, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
-        #"Added Custom" = Table.AddColumn(#"Converted to Table", "Custom", each [Column1][title]),
-        #"Added Custom1" = Table.AddColumn(#"Added Custom", "url", each [Column1][id]),
-        #"Renamed Columns" = Table.RenameColumns(#"Added Custom1",{{"Custom", "Title"}, {"url", "ID"}}),
-        #"Invoked Custom Function" = Table.AddColumn(#"Renamed Columns", "Reports", each GetReportFromReportId([ID], companyId,accessToken, url))
-        
-    in
-        #"Invoked Custom Function";
-        
-//
-//Get Reports from Report ID
-//
-GetReportFromReportId = (reportId, companyId, accessToken, url) =>
-    let
-        vUrl = url,
-        vHeaders =[
-        #"Method"="POST",
-        #"Content-Type"="application/json",
-        #"Authorization"=Text.Combine({"Bearer ", accessToken})
-        ],
-        query = "{""query"":""query GetReportDownloadUrl {  datRepDownloadableFile(    companyId: \""" & companyId & "\"",    reportId: \""" & reportId & "\""  ) {    downloadUrl  }}""}",
+        ], 
+        query = Text.Format("{""query"":""query q2 { supSearch(q: \""#MPN\"", limit: 3) { results { part { mpn manufacturer { name } } } } }""}",[MPN = MPN]),
         vContent=Text.ToBinary(query),
         Source = Web.Contents(vUrl,  [Headers=vHeaders, Content=vContent]),
-        #"JSON" = Json.Document(Source),  
-        data = #"JSON"[data],
-        datRepDownloadableFile = data[datRepDownloadableFile],
-        downloadURL = datRepDownloadableFile[downloadUrl],
-        csv = Csv.Document(Web.Contents(downloadURL),[Delimiter=",", Encoding=1252, QuoteStyle=QuoteStyle.None])
+        #"JSON" = Json.Document(Source),
+        data = JSON[data],
+        supSearch = data[supSearch],
+        results = supSearch[results],
+        results1 = results{0},
+        part = results1[part]
     in
-        csv;
-
-    
-
+          results;
+        
 Value.IfNull = (a, b) => if a <> null then a else b;
 
 GetScopeString = (scopes as list, optional scopePrefix as text) as text =>
@@ -225,7 +198,7 @@ AccessToken = (resourceUrl, access_token) => TokenMethod(access_token, "access_t
 
 Base64Url.Encode = (s) => Text.Replace(Text.Replace(Text.BeforeDelimiter(Binary.ToText(s,BinaryEncoding.Base64),"="),"+","-"),"/","_");
 
-Nexar_Connector.Icons = [
-    Icon16 = { Extension.Contents("Nexar_Connector16.png"), Extension.Contents("Nexar_Connector20.png"), Extension.Contents("Nexar_Connector24.png"), Extension.Contents("Nexar_Connector32.png") },
-    Icon32 = { Extension.Contents("Nexar_Connector32.png"), Extension.Contents("Nexar_Connector40.png"), Extension.Contents("Nexar_Connector48.png"), Extension.Contents("Nexar_Connector64.png") }
+Nexar_Supply_Connector.Icons = [
+    Icon16 = { Extension.Contents("Nexar_CoSupply_nnector16.png"), Extension.Contents("Nexar_CoSupply_nnector20.png"), Extension.Contents("Nexar_CoSupply_nnector24.png"), Extension.Contents("Nexar_CoSupply_nnector32.png") },
+    Icon32 = { Extension.Contents("Nexar_CoSupply_nnector32.png"), Extension.Contents("Nexar_CoSupply_nnector40.png"), Extension.Contents("Nexar_CoSupply_nnector48.png"), Extension.Contents("Nexar_CoSupply_nnector64.png") }
 ];
