@@ -171,17 +171,24 @@ SupplyExample = (MPN, resourceUrl, accessToken) =>
         #"Content-Type"="application/json",
         #"Authorization"=Text.Combine({"Bearer ", accessToken})
         ], 
-        query = Text.Format("{""query"":""query q2 { supSearch(q: \""#MPN\"", limit: 3) { results { part { mpn manufacturer { name } } } } }""}",[MPN = MPN]),
+        query_ = Text.Format("{""query"":""query q2 { supSearchMpn(q: \""#MPN\"", limit: 3) { results { part { mpn manufacturer { name } } } } }""}",[MPN = MPN]),
+        query = Text.Format("{""query"":""query q2 { supSearchMpn(q: \""#MPN\"", limit: 1) { results { part { mpn manufacturer { name } category { parentId id name path } shortDescription descriptions { text creditString } specs { attribute { name shortname } displayValue } } } } }""}",[MPN = MPN]),
+
         vContent=Text.ToBinary(query),
         Source = Web.Contents(vUrl,  [Headers=vHeaders, Content=vContent]),
         #"JSON" = Json.Document(Source),
         data = JSON[data],
-        supSearch = data[supSearch],
-        results = supSearch[results],
-        results1 = results{0},
-        part = results1[part]
+        supSearchMpn = data[supSearchMpn],
+        results = supSearchMpn[results],
+        //results1 = results{0},
+        //part = results1[part]
+        #"Converted to Table" = Table.FromList(results, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+        #"Expanded Column1" = Table.ExpandRecordColumn(#"Converted to Table", "Column1", {"part"}, {"Column1.part"}),
+        #"Expanded Column1.part" = Table.ExpandRecordColumn(#"Expanded Column1", "Column1.part", {"mpn", "manufacturer", "category", "shortDescription", "descriptions", "specs"}, {"Column1.part.mpn", "Column1.part.manufacturer", "Column1.part.category", "Column1.part.shortDescription", "Column1.part.descriptions", "Column1.part.specs"}),
+        #"Expanded Column1.part.manufacturer" = Table.ExpandRecordColumn(#"Expanded Column1.part", "Column1.part.manufacturer", {"name"}, {"Column1.part.manufacturer.name"}),
+        #"Expanded Column1.part.category" = Table.ExpandRecordColumn(#"Expanded Column1.part.manufacturer", "Column1.part.category", {"parentId", "id", "name", "path"}, {"Column1.part.category.parentId", "Column1.part.category.id", "Column1.part.category.name", "Column1.part.category.path"})
     in
-          results;
+          #"Expanded Column1.part.category";
         
 Value.IfNull = (a, b) => if a <> null then a else b;
 
